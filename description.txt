@@ -1,0 +1,3 @@
+Fixes liquid slope jankiness by rewriting how the front water target renders.
+
+May cause issues with other mods.

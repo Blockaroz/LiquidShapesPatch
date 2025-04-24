@@ -1,0 +1,4 @@
+displayName = Liquid Slopes Patch
+author = Blockaroz
+version = 1.0
+side = ModSide.Client
