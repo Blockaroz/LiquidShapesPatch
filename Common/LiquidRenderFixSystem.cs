@@ -38,12 +38,6 @@ public partial class LiquidRenderFixSystem : ModSystem
         
         FixRendering = true;
 
-        GetScreenDrawArea = Main.instance.TilesRenderer.GetType().GetMethod("GetScreenDrawArea", BindingFlags.NonPublic | BindingFlags.Instance)
-            .CreateDelegate<GetScreenDrawAreaDelegate>(Main.instance.TilesRenderer);
-
-        DrawWaters = typeof(Main).GetMethod("DrawWaters", BindingFlags.NonPublic | BindingFlags.Instance)
-            .CreateDelegate<DrawWatersDelegate>(Main.instance);
-
         Main.OnRenderTargetsInitialized += InitTargets;
         Main.OnRenderTargetsReleased += ReleaseTargets;
 
@@ -55,11 +49,6 @@ public partial class LiquidRenderFixSystem : ModSystem
         On_Main.RenderWater += RenderWaterOverride;
     }
 
-    public delegate void GetScreenDrawAreaDelegate(Vector2 screenPosition, Vector2 offSet, out int firstTileX, out int lastTileX, out int firstTileY, out int lastTileY);
-    public static GetScreenDrawAreaDelegate GetScreenDrawArea;
-    public delegate void DrawWatersDelegate(bool isBackground = false);
-    public static DrawWatersDelegate DrawWaters;
-
     private static HashSet<Point> _edgeTiles = new HashSet<Point>();
     private static HashSet<Point> _waterPlants = new HashSet<Point>();
 
@@ -67,7 +56,7 @@ public partial class LiquidRenderFixSystem : ModSystem
     {
         Vector2 unscaledPosition = Main.Camera.UnscaledPosition;
         Vector2 screenOff = new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange);
-        GetScreenDrawArea(unscaledPosition, screenOff, out int left, out int right, out int top, out int bottom);
+        Main.instance.TilesRenderer.GetScreenDrawArea(unscaledPosition, screenOff, out int left, out int right, out int top, out int bottom);
 
         _waterPlants.Clear();
         _edgeTiles.Clear();
@@ -211,7 +200,7 @@ public partial class LiquidRenderFixSystem : ModSystem
 
             try
             {
-                DrawWaters();
+                self.DrawWaters();
             }
             catch
             {
@@ -245,20 +234,20 @@ public partial class LiquidRenderFixSystem : ModSystem
         Main.tileBatch.Begin();
 
         foreach (Point point in _edgeTiles)
-            DrawSingleTile(point.X, point.Y, Main.screenPosition);
+            DrawSingleTile(point.X, point.Y, Main.screenPosition - offScreen);
 
         Main.tileBatch.End();
         Main.spriteBatch.Begin();
 
         foreach (Point point in _waterPlants)
-            Main.DrawTileInWater(-Main.screenPosition, point.X, point.Y);
+            Main.DrawTileInWater(-Main.screenPosition - offScreen, point.X, point.Y);
 
         Main.spriteBatch.End();
         Main.instance.GraphicsDevice.SetRenderTarget(liquidTargetNoCut);
         Main.instance.GraphicsDevice.Clear(Color.Transparent);
         Main.spriteBatch.Begin();
 
-        Main.spriteBatch.Draw(liquidTarget, Main.sceneWaterPos - Main.screenPosition, Color.White);
+        Main.spriteBatch.Draw(liquidTarget, Main.sceneWaterPos - Main.screenPosition + offScreen, Color.White);
 
         Main.spriteBatch.End();
         Main.instance.GraphicsDevice.SetRenderTarget(Main.waterTarget);
@@ -266,13 +255,10 @@ public partial class LiquidRenderFixSystem : ModSystem
         Main.spriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend);
 
         Effect mask = MaskEffect.Value;
-        mask.Parameters["uMaskAdd"].SetValue(liquidTargetNoCut);
-        mask.Parameters["uMaskSubtract"].SetValue(liquidMaskTarget);
-        mask.Parameters["uMaskColor"].SetValue(1);
-        mask.Parameters["useAlpha"].SetValue(false);
-        mask.Parameters["useColor"].SetValue(false);
+        mask.Parameters["uMaskTexture"]?.SetValue(liquidMaskTarget);
+        mask.Parameters["invert"]?.SetValue(true);
         mask.CurrentTechnique.Passes[0].Apply(); 
-        Main.spriteBatch.Draw(liquidTargetNoCut, offScreen, Color.White);
+        Main.spriteBatch.Draw(liquidTargetNoCut, Vector2.Zero, Color.White);
 
         Main.spriteBatch.End();
         Main.instance.GraphicsDevice.SetRenderTarget(null);

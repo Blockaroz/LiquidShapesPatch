@@ -18,23 +18,30 @@ public partial class LiquidRenderFixSystem : ModSystem
 {
     private static bool DrawTileLiquid;
 
+    private static bool IsInDrawBlack(int tileX, int tileY, Tile tileCache)
+    {
+        int totalColor = (Main.tileColor.R + Main.tileColor.G + Main.tileColor.B) / 3;
+        float color = (float)((double)totalColor * 0.4) / 255f;
+        bool flag2 = tileY >= Main.UnderworldLayer;
+        if (flag2)
+            color = 0.2f;
+
+        float brightness = Lighting.Brightness(tileX, tileY);
+        brightness = (float)Math.Floor(brightness * 255f) / 255f;
+        byte liquidAmont = tileCache.LiquidAmount;
+        return brightness <= color && ((!flag2 && liquidAmont < 250) || WorldGen.SolidTile(tileCache) || (liquidAmont >= 200 && brightness == 0f));
+    }
+
     private void CeaseLiquidInTileDraw(On_TileDrawing.orig_DrawTile_LiquidBehindTile orig, TileDrawing self, bool solidLayer, bool inFrontOfPlayers, int waterStyleOverride, Vector2 screenPosition, Vector2 screenOffset, int tileX, int tileY, Tile tileCache)
     {
         if (FixRendering)
         {
-            if (DrawTileLiquid)
-                orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
+            if ((IsInDrawBlack(tileX, tileY, tileCache) || (DrawTileLiquid && !solidLayer)) && tileY < Main.worldSurface && tileCache.WallType == WallID.None)
+                orig(self, !solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
         }
         else
             orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
     }
-
-    public static readonly float[] DEFAULT_LIQUID_OPACITY = [
-        0.6f,
-        0.95f,
-        0.95f,
-        0.75f
-    ];
 
     private void DrawLiquid(On_Main.orig_DrawLiquid orig, Main self, bool bg, int waterStyle, float Alpha, bool drawSinglePassLiquids)
     {
@@ -46,20 +53,18 @@ public partial class LiquidRenderFixSystem : ModSystem
                 return;
             }
 
-            DrawTileLiquid = true;
+            DrawTileLiquid = false;
 
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
             Vector2 drawOffset = (Main.drawToScreen ? Vector2.Zero : new Vector2(Main.offScreenRange)) - Main.screenPosition;
 
+            //Main.instance.TilesRenderer.DrawLiquidBehindTiles();
             DrawLiquidOverTiles(waterStyle, Alpha, bg);
-            LiquidRenderer.Instance.DrawNormalLiquids(Main.spriteBatch, drawOffset, waterStyle, Alpha, bg);
 
+            LiquidRenderer.Instance.DrawNormalLiquids(Main.spriteBatch, drawOffset, waterStyle, Alpha, bg);
             if (drawSinglePassLiquids)
-            {
-                DrawLiquidOverTiles(waterStyle, Alpha, bg, true);
                 LiquidRenderer.Instance.DrawShimmer(Main.spriteBatch, drawOffset, bg);
-            }
 
             if (!bg)
                 TimeLogger.DrawTime(4, stopwatch.Elapsed.TotalMilliseconds);
@@ -70,12 +75,12 @@ public partial class LiquidRenderFixSystem : ModSystem
             orig(self, bg, waterStyle, Alpha, drawSinglePassLiquids);
     }
 
-    private static void DrawLiquidOverTiles(int waterStyle, float alpha, bool bg = false, bool shimmer = false)
+    private static void DrawLiquidOverTiles(int waterStyle, float alpha, bool bg = false)
     {
         Vector2 unscaledPosition = Main.Camera.UnscaledPosition;
         Vector2 screenOff = new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange);
 
-        GetScreenDrawArea(unscaledPosition, screenOff + (Main.Camera.UnscaledPosition - Main.Camera.ScaledPosition), out int left, out int right, out int top, out int bottom);
+        Main.instance.TilesRenderer.GetScreenDrawArea(unscaledPosition, screenOff + (Main.Camera.UnscaledPosition - Main.Camera.ScaledPosition), out int left, out int right, out int top, out int bottom);
 
         for (int j = top; j < bottom; j++)
         {
@@ -199,59 +204,41 @@ public partial class LiquidRenderFixSystem : ModSystem
                                 break;
                         }
 
-                        if (shimmer)
-                        {
-                            if (liquidType == LiquidID.Shimmer)
-                                DrawLiquidTile(i, j, LiquidID.Shimmer, realStyle, liquidPos - Main.screenPosition + new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange), liquidFrame, 1f, bg);
-                        }
-                        else
-                        {
-                            if (liquidType != LiquidID.Shimmer)
-                                DrawLiquidTile(i, j, liquidType, realStyle, liquidPos - Main.screenPosition + new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange), liquidFrame, alpha, bg);
-                        }
+                        DrawLiquidTile(i, j, liquidType, realStyle, liquidPos - Main.screenPosition + new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange), liquidFrame, alpha, bg);
                     }
                 }
             }
         }
     }
 
-    private delegate void DrawPartialLiquidDelegate();
-    private static DrawPartialLiquidDelegate DrawPartialLiquid;
 
     private static void DrawLiquidTile(int i, int j, int liquidType, int waterStyle, Vector2 position, Rectangle frame, float alpha, bool bg)
     {
         Lighting.GetCornerColors(i, j, out VertexColors colors);
 
-        if (liquidType == LiquidID.Shimmer)
-            LiquidRenderer.SetShimmerVertexColors(ref colors, bg ? 1f : alpha * 0.75f, i, j);
+        float liquidOpacity = LiquidRenderer.DEFAULT_OPACITY[liquidType];
 
+        if (liquidType == LiquidID.Shimmer)
+            LiquidRenderer.SetShimmerVertexColors(ref colors, bg ? 1f : alpha * liquidOpacity, i, j);
         else
         {
-            if (Main.tile[i, j].IsHalfBlock && Main.tile[i, j - 1].LiquidAmount > 0)
-            {
-                colors.TopLeftColor = colors.TopLeftColor.MultiplyRGBA(new Color(215, 215, 215));
-                colors.TopRightColor = colors.TopRightColor.MultiplyRGBA(new Color(215, 215, 215));
-                colors.BottomLeftColor = colors.BottomLeftColor.MultiplyRGBA(new Color(215, 215, 215));
-                colors.BottomRightColor = colors.BottomRightColor.MultiplyRGBA(new Color(215, 215, 215));
-            }
-
             if (!bg)
             {
-                colors.TopLeftColor *= DEFAULT_LIQUID_OPACITY[liquidType];
-                colors.TopRightColor *= DEFAULT_LIQUID_OPACITY[liquidType];
-                colors.BottomLeftColor *= DEFAULT_LIQUID_OPACITY[liquidType];
-                colors.BottomRightColor *= DEFAULT_LIQUID_OPACITY[liquidType];
-            }
+                colors.TopLeftColor *= liquidOpacity;
+                colors.TopRightColor *= liquidOpacity;
+                colors.BottomLeftColor *= liquidOpacity;
+                colors.BottomRightColor *= liquidOpacity;
 
-            if (liquidType == LiquidID.Water)
-            {
-                colors.TopLeftColor *= alpha;
-                colors.TopRightColor *= alpha;
-                colors.BottomLeftColor *= alpha;
-                colors.BottomRightColor *= alpha;
+                if (Main.tile[i, j].IsHalfBlock && Main.tile[i, j - 1].LiquidAmount > 0)
+                {
+                    colors.TopLeftColor = colors.TopLeftColor.MultiplyRGBA(new Color(215, 215, 215));
+                    colors.TopRightColor = colors.TopRightColor.MultiplyRGBA(new Color(215, 215, 215));
+                    colors.BottomLeftColor = colors.BottomLeftColor.MultiplyRGBA(new Color(215, 215, 215));
+                    colors.BottomRightColor = colors.BottomRightColor.MultiplyRGBA(new Color(215, 215, 215));
+                }
             }
         }
 
-        Main.tileBatch.Draw(TextureAssets.Liquid[waterStyle].Value, position, frame, colors, Vector2.Zero, 1f, 0);
+        Main.instance.TilesRenderer.DrawPartialLiquid(bg, Main.tile[i, j], ref position, ref frame, waterStyle, ref colors);
     }
 }

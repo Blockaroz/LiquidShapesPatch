@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<!-- Import tModLoader mod properties -->
 	<Import Project="..\tModLoader.targets" />
@@ -7,11 +7,16 @@
 	<PropertyGroup>
 		
 	</PropertyGroup>
+	
 	<ItemGroup>
 	  <PackageReference Include="Krafs.Publicizer" Version="2.3.0">
 	    <PrivateAssets>all</PrivateAssets>
 	    <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 	  </PackageReference>
+	</ItemGroup>
+
+	<ItemGroup Label="Publicized assemblies">
+		<Publicize Include="tModLoader" IncludeCompilerGeneratedMembers="false"/>
 	</ItemGroup>
 
 	<!-- References -->
