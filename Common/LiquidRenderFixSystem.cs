@@ -26,7 +26,7 @@ public partial class LiquidRenderFixSystem : ModSystem
     public static event Action PreRenderLiquid;
     public static event Action PostRenderLiquid;
 
-    public static bool FixRendering => true; // May want to check for certain mods first
+    public static bool FixRendering { get; set; } // May want to check for certain mods first
 
     public override void Load()
     {
@@ -34,20 +34,28 @@ public partial class LiquidRenderFixSystem : ModSystem
             return;
 
         MaskEffect = ModContent.Request<Effect>($"{nameof(LiquidShapesPatch)}/Assets/Effects/ImageMask", AssetRequestMode.ImmediateLoad);
+        
+        FixRendering = true;
 
         GetScreenDrawArea = Main.instance.TilesRenderer.GetType().GetMethod("GetScreenDrawArea", BindingFlags.NonPublic | BindingFlags.Instance)
             .CreateDelegate<GetScreenDrawAreaDelegate>(Main.instance.TilesRenderer);
 
+        DrawWaters = typeof(Main).GetMethod("DrawWaters", BindingFlags.NonPublic | BindingFlags.Instance)
+            .CreateDelegate<DrawWatersDelegate>(Main.instance);
+
         Main.OnRenderTargetsInitialized += InitTargets;
         Main.OnRenderTargetsReleased += ReleaseTargets;
-        IL_Main.DoDraw += ReplaceDrawTarget;
 
+        IL_Main.DoDraw += AddEventsToDraw;
+        On_Main.DrawLiquid += DrawLiquid;
         On_Main.DoDraw_UpdateCameraPosition += PrepareTargets;
-        On_Main.DrawLiquid += DrawLiquid;    
+        On_Main.RenderWater += RenderWaterOverride;
     }
 
     public delegate void GetScreenDrawAreaDelegate(Vector2 screenPosition, Vector2 offSet, out int firstTileX, out int lastTileX, out int firstTileY, out int lastTileY);
     public static GetScreenDrawAreaDelegate GetScreenDrawArea;
+    public delegate void DrawWatersDelegate(bool isBackground = false);
+    public static DrawWatersDelegate DrawWaters;
 
     private static HashSet<Point> _edgeTiles = new HashSet<Point>();
     private static HashSet<Point> _waterPlants = new HashSet<Point>();
@@ -113,7 +121,7 @@ public partial class LiquidRenderFixSystem : ModSystem
         }
     }
 
-    private void ReplaceDrawTarget(ILContext il)
+    private void AddEventsToDraw(ILContext il)
     {
         try
         {
@@ -132,18 +140,14 @@ public partial class LiquidRenderFixSystem : ModSystem
         {
             MonoModHooks.DumpIL(Mod, il);
             Mod.Logger.Error("Water target was unable to be replaced.");
+            FixRendering = false;
         }
     }
 
     private void DrawWater()
     {
         PreRenderLiquid?.Invoke();
-
-        if (FixRendering && _ready)
-            Main.spriteBatch.Draw(liquidTarget, Vector2.Zero, Color.White);
-        else
-            Main.spriteBatch.Draw(Main.waterTarget, Main.sceneWaterPos - Main.screenPosition, Color.White);
-
+        Main.spriteBatch.Draw(Main.waterTarget, Main.sceneWaterPos - Main.screenPosition, Color.White);
         PostRenderLiquid?.Invoke();
     }
 
@@ -155,6 +159,8 @@ public partial class LiquidRenderFixSystem : ModSystem
 
     private void InitTargets(int width, int height)
     {
+        width += Main.offScreenRange * 2;
+        height += Main.offScreenRange * 2;
         try
         {
             liquidTarget = new RenderTarget2D(Main.instance.GraphicsDevice, width, height, mipMap: false, Main.instance.GraphicsDevice.PresentationParameters.BackBufferFormat, DepthFormat.None);
@@ -184,6 +190,7 @@ public partial class LiquidRenderFixSystem : ModSystem
         catch (Exception ex)
         {
             Console.WriteLine("Error disposing liquid rendering render targets. " + ex);
+            FixRendering = false;
         }
 
         liquidTarget = null;
@@ -191,16 +198,42 @@ public partial class LiquidRenderFixSystem : ModSystem
         liquidMaskTarget = null;
     }
 
+    private void RenderWaterOverride(On_Main.orig_RenderWater orig, Main self)
+    {
+        if (FixRendering && !Main.drawToScreen)
+        {
+            self.GraphicsDevice.SetRenderTarget(liquidTarget);
+            self.GraphicsDevice.Clear(Color.Transparent);
+            Main.spriteBatch.Begin();
+
+            try
+            {
+                DrawWaters();
+            }
+            catch
+            {
+            }
+
+            TimeLogger.DetailedDrawReset();
+            Main.spriteBatch.End();
+            TimeLogger.DetailedDrawTime(31);
+
+            self.GraphicsDevice.SetRenderTarget(null);
+
+        }
+        else
+            orig(self);
+    }
 
     private void PrepareTargets(On_Main.orig_DoDraw_UpdateCameraPosition orig)
     {
         orig();
 
-        if (Main.drawToScreen || Main.gameMenu || !_ready)
+        if (Main.renderCount != 1 || !_ready)
             return;
 
         Vector2 unscaledPosition = Main.Camera.UnscaledPosition;
-        Vector2 screenOff = new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange);
+        Vector2 offScreen = new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange);
 
         GetCuttingTiles();
 
@@ -222,10 +255,10 @@ public partial class LiquidRenderFixSystem : ModSystem
         Main.instance.GraphicsDevice.Clear(Color.Transparent);
         Main.spriteBatch.Begin();
 
-        Main.spriteBatch.Draw(Main.waterTarget, Main.sceneWaterPos - Main.screenPosition, Color.White);
+        Main.spriteBatch.Draw(liquidTarget, Main.sceneWaterPos - Main.screenPosition, Color.White);
 
         Main.spriteBatch.End();
-        Main.instance.GraphicsDevice.SetRenderTarget(liquidTarget);
+        Main.instance.GraphicsDevice.SetRenderTarget(Main.waterTarget);
         Main.instance.GraphicsDevice.Clear(Color.Transparent);
         Main.spriteBatch.Begin(SpriteSortMode.Immediate, BlendState.AlphaBlend);
 
@@ -236,7 +269,7 @@ public partial class LiquidRenderFixSystem : ModSystem
         mask.Parameters["useAlpha"].SetValue(false);
         mask.Parameters["useColor"].SetValue(false);
         mask.CurrentTechnique.Passes[0].Apply(); 
-        Main.spriteBatch.Draw(liquidTargetNoCut, Vector2.Zero, Color.White);
+        Main.spriteBatch.Draw(liquidTargetNoCut, offScreen, Color.White);
 
         Main.spriteBatch.End();
         Main.instance.GraphicsDevice.SetRenderTarget(null);

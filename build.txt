@@ -3,3 +3,4 @@ author = Blockaroz
 version = 1.0
 includeSource = true
 side = Client
+loadAfter = SpiritReforged, CalamityFables

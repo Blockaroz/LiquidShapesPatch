@@ -61,7 +61,9 @@ public partial class LiquidRenderFixSystem : ModSystem
         GetScreenDrawArea(unscaledPosition, screenOff + (Main.Camera.UnscaledPosition - Main.Camera.ScaledPosition), out int left, out int right, out int top, out int bottom);
 
         if (bg)
-            Main.instance.TilesRenderer.DrawLiquidBehindTiles(waterStyle);
+        {
+            return;
+        }
 
         for (int j = top; j < bottom; j++)
         {
@@ -206,15 +208,15 @@ public partial class LiquidRenderFixSystem : ModSystem
         Lighting.GetCornerColors(i, j, out VertexColors colors);
 
         if (liquidType == LiquidID.Shimmer)
-            LiquidRenderer.SetShimmerVertexColors(ref colors, bg ? 1f : 0.75f * alpha, i, j);
+            LiquidRenderer.SetShimmerVertexColors(ref colors, bg ? 1f : alpha * 0.75f, i, j);
         else
         {
-            if (liquidType == LiquidID.Water)
+            if (Main.tile[i, j].IsHalfBlock && Main.tile[i, j - 1].LiquidAmount > 0)
             {
-                colors.TopLeftColor *= alpha;
-                colors.TopRightColor *= alpha;
-                colors.BottomLeftColor *= alpha;
-                colors.BottomRightColor *= alpha;
+                colors.TopLeftColor = colors.TopLeftColor.MultiplyRGBA(new Color(215, 215, 215));
+                colors.TopRightColor = colors.TopRightColor.MultiplyRGBA(new Color(215, 215, 215));
+                colors.BottomLeftColor = colors.BottomLeftColor.MultiplyRGBA(new Color(215, 215, 215));
+                colors.BottomRightColor = colors.BottomRightColor.MultiplyRGBA(new Color(215, 215, 215));
             }
 
             if (!bg)
@@ -225,12 +227,12 @@ public partial class LiquidRenderFixSystem : ModSystem
                 colors.BottomRightColor *= DEFAULT_LIQUID_OPACITY[liquidType];
             }
 
-            if (Main.tile[i, j].IsHalfBlock && Main.tile[i, j - 1].LiquidAmount > 0)
+            if (liquidType == LiquidID.Water)
             {
-                colors.TopLeftColor = colors.TopLeftColor.MultiplyRGBA(new Color(215, 215, 215));
-                colors.TopRightColor = colors.TopRightColor.MultiplyRGBA(new Color(215, 215, 215));
-                colors.BottomLeftColor = colors.BottomLeftColor.MultiplyRGBA(new Color(215, 215, 215));
-                colors.BottomRightColor = colors.BottomRightColor.MultiplyRGBA(new Color(215, 215, 215));
+                colors.TopLeftColor *= alpha;
+                colors.TopRightColor *= alpha;
+                colors.BottomLeftColor *= alpha;
+                colors.BottomRightColor *= alpha;
             }
         }
 
