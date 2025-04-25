@@ -26,7 +26,8 @@ public partial class LiquidRenderFixSystem : ModSystem
     public static event Action PreRenderLiquid;
     public static event Action PostRenderLiquid;
 
-    public static bool FixRendering { get; set; } // May want to check for certain mods first
+    private static bool _fixRendering;
+    public static bool FixRendering { get => _fixRendering && !Main.drawToScreen; set => _fixRendering = value; } // May want to check for certain mods first
 
     public override void Load()
     {
@@ -45,6 +46,8 @@ public partial class LiquidRenderFixSystem : ModSystem
 
         Main.OnRenderTargetsInitialized += InitTargets;
         Main.OnRenderTargetsReleased += ReleaseTargets;
+
+        On_TileDrawing.DrawTile_LiquidBehindTile += CeaseLiquidInTileDraw;
 
         IL_Main.DoDraw += AddEventsToDraw;
         On_Main.DrawLiquid += DrawLiquid;

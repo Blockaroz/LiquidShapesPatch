@@ -16,6 +16,19 @@ namespace LiquidShapesPatch.Common;
 
 public partial class LiquidRenderFixSystem : ModSystem
 {
+    private static bool DrawTileLiquid;
+
+    private void CeaseLiquidInTileDraw(On_TileDrawing.orig_DrawTile_LiquidBehindTile orig, TileDrawing self, bool solidLayer, bool inFrontOfPlayers, int waterStyleOverride, Vector2 screenPosition, Vector2 screenOffset, int tileX, int tileY, Tile tileCache)
+    {
+        if (FixRendering)
+        {
+            if (DrawTileLiquid)
+                orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
+        }
+        else
+            orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
+    }
+
     public static readonly float[] DEFAULT_LIQUID_OPACITY = [
         0.6f,
         0.95f,
@@ -33,6 +46,8 @@ public partial class LiquidRenderFixSystem : ModSystem
                 return;
             }
 
+            DrawTileLiquid = true;
+
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
             Vector2 drawOffset = (Main.drawToScreen ? Vector2.Zero : new Vector2(Main.offScreenRange)) - Main.screenPosition;
@@ -48,6 +63,8 @@ public partial class LiquidRenderFixSystem : ModSystem
 
             if (!bg)
                 TimeLogger.DrawTime(4, stopwatch.Elapsed.TotalMilliseconds);
+
+            DrawTileLiquid = false;
         }
         else
             orig(self, bg, waterStyle, Alpha, drawSinglePassLiquids);
@@ -59,11 +76,6 @@ public partial class LiquidRenderFixSystem : ModSystem
         Vector2 screenOff = new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange);
 
         GetScreenDrawArea(unscaledPosition, screenOff + (Main.Camera.UnscaledPosition - Main.Camera.ScaledPosition), out int left, out int right, out int top, out int bottom);
-
-        if (bg)
-        {
-            return;
-        }
 
         for (int j = top; j < bottom; j++)
         {
@@ -203,12 +215,16 @@ public partial class LiquidRenderFixSystem : ModSystem
         }
     }
 
+    private delegate void DrawPartialLiquidDelegate();
+    private static DrawPartialLiquidDelegate DrawPartialLiquid;
+
     private static void DrawLiquidTile(int i, int j, int liquidType, int waterStyle, Vector2 position, Rectangle frame, float alpha, bool bg)
     {
         Lighting.GetCornerColors(i, j, out VertexColors colors);
 
         if (liquidType == LiquidID.Shimmer)
             LiquidRenderer.SetShimmerVertexColors(ref colors, bg ? 1f : alpha * 0.75f, i, j);
+
         else
         {
             if (Main.tile[i, j].IsHalfBlock && Main.tile[i, j - 1].LiquidAmount > 0)
