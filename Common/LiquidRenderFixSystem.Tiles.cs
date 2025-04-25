@@ -1,36 +1,27 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using Terraria.GameContent.Drawing;
-using Terraria;
-using Terraria.ModLoader;
+﻿using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics.PackedVector;
+using System;
 using System.Diagnostics;
-using Terraria.GameContent.Liquid;
+using System.Reflection;
+using Terraria;
 using Terraria.GameContent;
-using Terraria.Graphics.Light;
+using Terraria.GameContent.Drawing;
+using Terraria.GameContent.Liquid;
 using Terraria.Graphics;
+using Terraria.Graphics.Light;
 using Terraria.ID;
-using Microsoft.Xna.Framework;
+using Terraria.ModLoader;
 
-namespace LiquidShapesPatch;
+namespace LiquidShapesPatch.Common;
 
-public class LiquidRenderFixSystem : ModSystem
+public partial class LiquidRenderFixSystem : ModSystem
 {
-    public static bool FixRendering => true; // May want to check for certain mods first
-
-    public static readonly float[] DEFAULT_LIQUID_OPACITY;
-
-    public override void Load()
-    {
-        On_Main.DrawLiquid += DrawLiquid;
-        On_TileDrawing.DrawTile_LiquidBehindTile += CeaseInTileDraw;
-
-        GetScreenDrawArea = Main.instance.TilesRenderer.GetType().GetMethod("GetScreenDrawArea", BindingFlags.NonPublic | BindingFlags.Instance)
-            .CreateDelegate<ScreenAreaDelegate>(Main.instance.TilesRenderer);
-    }
+    public static readonly float[] DEFAULT_LIQUID_OPACITY = [
+        0.6f,
+        0.95f,
+        0.95f,
+        0.75f
+    ];
 
     private void CeaseInTileDraw(On_TileDrawing.orig_DrawTile_LiquidBehindTile orig, TileDrawing self, bool solidLayer, bool inFrontOfPlayers, int waterStyleOverride, Vector2 screenPosition, Vector2 screenOffset, int tileX, int tileY, Tile tileCache)
     {
@@ -56,15 +47,13 @@ public class LiquidRenderFixSystem : ModSystem
             if (tileY > Main.UnderworldLayer)
                 num2 = 0.2f;
 
-            if (tileY < Main.worldSurface && num8 < num2 && tileCache.WallType == 0)
-                orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
+            //if (tileY < Main.worldSurface && num8 < num2 && tileCache.WallType == 0)
+            //    orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
         }
         else
             orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
     }
 
-    private delegate void ScreenAreaDelegate(Vector2 screenPosition, Vector2 offSet, out int firstTileX, out int lastTileX, out int firstTileY, out int lastTileY);
-    private static ScreenAreaDelegate GetScreenDrawArea;
 
     private void DrawLiquid(On_Main.orig_DrawLiquid orig, Main self, bool bg, int waterStyle, float Alpha, bool drawSinglePassLiquids)
     {
@@ -81,7 +70,6 @@ public class LiquidRenderFixSystem : ModSystem
             Vector2 drawOffset = (Main.drawToScreen ? Vector2.Zero : new Vector2(Main.offScreenRange)) - Main.screenPosition;
 
             DrawLiquidOverTiles(waterStyle, Alpha, bg);
-
             LiquidRenderer.Instance.DrawNormalLiquids(Main.spriteBatch, drawOffset, waterStyle, Alpha, bg);
 
             if (drawSinglePassLiquids)
@@ -96,6 +84,9 @@ public class LiquidRenderFixSystem : ModSystem
         else
             orig(self, bg, waterStyle, Alpha, drawSinglePassLiquids);
     }
+
+    private delegate void DrawTileLiquidDelegate(bool solidLayer, bool inFrontOfPlayers, int waterStyleOverride, Vector2 screenPosition, Vector2 screenOffset, int tileX, int tileY, Tile tileCache);
+    private static DrawTileLiquidDelegate DrawTile_LiquidBehindTile;
 
     private static void DrawLiquidOverTiles(int waterStyle, float alpha, bool bg = false, bool shimmer = false)
     {

@@ -1,3 +1,10 @@
 Fixes liquid slope jankiness by rewriting how the front water target renders.
 
+1. Stop tiles from rendering water inside them
+2. Stop DrawBlack from going over waterlogged tiles that are not perfectly dark
+3. Draw water in waterlogged tiles onto targets instead of tiles
+4. Back water is left alone
+5. Draw the water target, cut the edges off using tile target
+6. Draw the final water target
+
 May cause issues with other mods.
