@@ -23,38 +23,6 @@ public partial class LiquidRenderFixSystem : ModSystem
         0.75f
     ];
 
-    private void CeaseInTileDraw(On_TileDrawing.orig_DrawTile_LiquidBehindTile orig, TileDrawing self, bool solidLayer, bool inFrontOfPlayers, int waterStyleOverride, Vector2 screenPosition, Vector2 screenOffset, int tileX, int tileY, Tile tileCache)
-    {
-        if (FixRendering)
-        {
-            int num = (Main.tileColor.R + Main.tileColor.G + Main.tileColor.B) / 3;
-            float num2 = (float)((double)num * 0.4) / 255f;
-            if (Lighting.Mode == LightMode.Retro)
-            {
-                num2 = (float)(Main.tileColor.R - 55) / 255f;
-                if (num2 < 0f)
-                    num2 = 0f;
-            }
-            else if (Lighting.Mode == LightMode.Trippy)
-            {
-                num2 = (float)(num - 55) / 255f;
-                if (num2 < 0f)
-                    num2 = 0f;
-            }
-            float num8 = Lighting.Brightness(tileX, tileY);
-            num8 = (float)Math.Floor(num8 * 255f) / 255f;
-
-            if (tileY > Main.UnderworldLayer)
-                num2 = 0.2f;
-
-            //if (tileY < Main.worldSurface && num8 < num2 && tileCache.WallType == 0)
-            //    orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
-        }
-        else
-            orig(self, solidLayer, inFrontOfPlayers, waterStyleOverride, screenPosition, screenOffset, tileX, tileY, tileCache);
-    }
-
-
     private void DrawLiquid(On_Main.orig_DrawLiquid orig, Main self, bool bg, int waterStyle, float Alpha, bool drawSinglePassLiquids)
     {
         if (FixRendering)
@@ -85,15 +53,15 @@ public partial class LiquidRenderFixSystem : ModSystem
             orig(self, bg, waterStyle, Alpha, drawSinglePassLiquids);
     }
 
-    private delegate void DrawTileLiquidDelegate(bool solidLayer, bool inFrontOfPlayers, int waterStyleOverride, Vector2 screenPosition, Vector2 screenOffset, int tileX, int tileY, Tile tileCache);
-    private static DrawTileLiquidDelegate DrawTile_LiquidBehindTile;
-
     private static void DrawLiquidOverTiles(int waterStyle, float alpha, bool bg = false, bool shimmer = false)
     {
         Vector2 unscaledPosition = Main.Camera.UnscaledPosition;
         Vector2 screenOff = new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange);
 
         GetScreenDrawArea(unscaledPosition, screenOff + (Main.Camera.UnscaledPosition - Main.Camera.ScaledPosition), out int left, out int right, out int top, out int bottom);
+
+        if (bg)
+            Main.instance.TilesRenderer.DrawLiquidBehindTiles(waterStyle);
 
         for (int j = top; j < bottom; j++)
         {
@@ -124,7 +92,7 @@ public partial class LiquidRenderFixSystem : ModSystem
                         onTop = true;
                     }
 
-                    if (Main.tile[i - 1, j].LiquidAmount > 0) // copy frome side
+                    if (Main.tile[i - 1, j].LiquidAmount > 0) // copy from side
                     {
                         if (Main.tile[i - 1, j].LiquidAmount < 240)
                             liquidAmount = Main.tile[i - 1, j].LiquidAmount;
@@ -135,7 +103,7 @@ public partial class LiquidRenderFixSystem : ModSystem
                         onLeft = true;
                     }
 
-                    if (Main.tile[i + 1, j].LiquidAmount > 0) // copy frome side
+                    if (Main.tile[i + 1, j].LiquidAmount > 0) // copy from side
                     {
                         if (Main.tile[i + 1, j].LiquidAmount < 240)
                             liquidAmount = Main.tile[i + 1, j].LiquidAmount;

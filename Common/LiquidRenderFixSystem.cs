@@ -7,6 +7,7 @@ using ReLogic.Content;
 using ReLogic.Threading;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Reflection;
 using Terraria;
 using Terraria.GameContent;
@@ -37,16 +38,12 @@ public partial class LiquidRenderFixSystem : ModSystem
         GetScreenDrawArea = Main.instance.TilesRenderer.GetType().GetMethod("GetScreenDrawArea", BindingFlags.NonPublic | BindingFlags.Instance)
             .CreateDelegate<GetScreenDrawAreaDelegate>(Main.instance.TilesRenderer);
 
-        DrawTile_LiquidBehindTile = Main.instance.TilesRenderer.GetType().GetMethod("DrawTile_LiquidBehindTile", BindingFlags.NonPublic | BindingFlags.Instance)
-            .CreateDelegate<DrawTileLiquidDelegate>(Main.instance.TilesRenderer);
-
         Main.OnRenderTargetsInitialized += InitTargets;
         Main.OnRenderTargetsReleased += ReleaseTargets;
         IL_Main.DoDraw += ReplaceDrawTarget;
 
         On_Main.DoDraw_UpdateCameraPosition += PrepareTargets;
-        On_Main.DrawLiquid += DrawLiquid;
-        On_TileDrawing.DrawTile_LiquidBehindTile += CeaseInTileDraw;
+        On_Main.DrawLiquid += DrawLiquid;    
     }
 
     public delegate void GetScreenDrawAreaDelegate(Vector2 screenPosition, Vector2 offSet, out int firstTileX, out int lastTileX, out int firstTileY, out int lastTileY);
@@ -60,6 +57,9 @@ public partial class LiquidRenderFixSystem : ModSystem
         Vector2 unscaledPosition = Main.Camera.UnscaledPosition;
         Vector2 screenOff = new Vector2(Main.drawToScreen ? 0 : Main.offScreenRange);
         GetScreenDrawArea(unscaledPosition, screenOff, out int left, out int right, out int top, out int bottom);
+
+        _waterPlants.Clear();
+        _edgeTiles.Clear();
 
         for (int i = left; i < right; i++)
         {
@@ -75,29 +75,36 @@ public partial class LiquidRenderFixSystem : ModSystem
                 {
                     bool foundValid = false;
 
-                    if (!foundValid && WorldGen.InWorld(i, j + 1))
+                    if (WorldGen.InWorld(i, j + 1))
                     {
                         if (Main.tile[i, j + 1].LiquidAmount >= 255)
                             foundValid = true;
                     }
-
-                    if (!foundValid && WorldGen.InWorld(i, j - 1))
+                    if (WorldGen.InWorld(i, j - 1))
                     {
                         if (Main.tile[i, j - 1].LiquidAmount > 0)
                             foundValid = true;
                     }
-
-                    if (!foundValid && WorldGen.InWorld(i - 1, j))
+                    if (WorldGen.InWorld(i - 1, j))
                     {
                         if (Main.tile[i - 1, j].LiquidAmount > 0)
                             foundValid = true;
                     }
-
-                    if (!foundValid && WorldGen.InWorld(i + 1, j))
+                    if (WorldGen.InWorld(i + 1, j))
                     {
                         if (Main.tile[i + 1, j].LiquidAmount > 0)
                             foundValid = true;
+                    }                          
+                    if (WorldGen.InWorld(i - 1, j - 1))
+                    {
+                        if (Main.tile[i - 1, j - 1].LiquidAmount > 0)
+                            foundValid = true;
                     }
+                    if (WorldGen.InWorld(i + 1, j - 1))
+                    {
+                        if (Main.tile[i + 1, j - 1].LiquidAmount > 0)
+                            foundValid = true;
+                    }                    
 
                     if (foundValid)
                         _edgeTiles.Add(new Point(i, j));
@@ -133,9 +140,7 @@ public partial class LiquidRenderFixSystem : ModSystem
         PreRenderLiquid?.Invoke();
 
         if (FixRendering && _ready)
-        {
             Main.spriteBatch.Draw(liquidTarget, Vector2.Zero, Color.White);
-        }
         else
             Main.spriteBatch.Draw(Main.waterTarget, Main.sceneWaterPos - Main.screenPosition, Color.White);
 
@@ -201,9 +206,13 @@ public partial class LiquidRenderFixSystem : ModSystem
 
         Main.instance.GraphicsDevice.SetRenderTarget(liquidMaskTarget);
         Main.instance.GraphicsDevice.Clear(Color.Transparent);
-        Main.spriteBatch.Begin();
+        Main.tileBatch.Begin();
 
-        Main.spriteBatch.Draw(Main.instance.tileTarget, Main.sceneTilePos - Main.screenPosition, Color.White);
+        foreach (Point point in _edgeTiles)
+            DrawSingleTile(point.X, point.Y, Main.screenPosition);
+
+        Main.tileBatch.End();
+        Main.spriteBatch.Begin();
 
         foreach (Point point in _waterPlants)
             Main.DrawTileInWater(-Main.screenPosition, point.X, point.Y);
